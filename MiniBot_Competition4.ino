@@ -34,6 +34,18 @@ bool lastTriangleState = false;
 bool victoryActive = false;
 uint8_t victoryHue = 0;
 
+// D-PAD LED EFFECTS
+bool lastDpadUp = false, lastDpadDown = false, lastDpadLeft = false, lastDpadRight = false;
+enum DpadEffect { DPAD_NONE, DPAD_TWINKLE, DPAD_LIGHTNING, DPAD_SIREN, DPAD_PLASMA };
+DpadEffect currentDpadEffect = DPAD_NONE;
+unsigned long dpadEffectStart = 0;
+const unsigned long DPAD_EFFECT_DURATION = 8000; // ms each effect plays before returning to snake
+
+// BATTERY MONITORING (visual warning only - does not affect power/performance)
+float battVoltage = 0;
+bool batteryWarn = false;
+const float BATT_WARN_V = 7.0;      // snake turns red below this
+
 // changing the damn servo angle so they aline 
 const int TRIM_7 = -7;  
 const int TRIM_8 = 0;
@@ -66,6 +78,32 @@ uint8_t rainbowHue = 0;
 
 #define WDT_TIMEOUT 3
 Servo MotorOutput[13];
+
+// DRIVE SMOOTHING
+float currentLeftOut = 90;
+float currentRightOut = 90;
+
+const float SLEW_RATE = 25; // adjust this higher for faster response
+
+unsigned long leftReverseDwell = 0;
+unsigned long rightReverseDwell = 0;
+const unsigned long REVERSE_DWELL_MS = 100; // time to hold at neutral before reversing
+
+void SlewMove(float &current, float target) {
+
+  if (current < target) {
+    current += SLEW_RATE;
+    if (current > target)
+      current = target;
+  }
+
+  else if (current > target) {
+    current -= SLEW_RATE;
+    if (current < target)
+      current = target;
+  }
+
+}
 
 void INIT_InternalFeatures() {
   Serial.begin(115200);
@@ -295,11 +333,85 @@ void ConfigureMotorOutput(uint8_t slot, MotorType motorType, int startupPosition
 
   }
 
-void UpdateExternalStrip(bool r2Pressed, bool r1Pressed, bool trianglePressed) {
+void DpadTwinkle() {
+  fadeToBlackBy(leds2, NUM_LEDS2, 40);
+  fadeToBlackBy(leds, LED_COUNT, 40);
+  if (random8() < 60) {
+    leds2[random16(NUM_LEDS2)] = CHSV(160, 90, 255);
+  }
+  if (random8() < 90) {
+    leds[random16(LED_COUNT)] = CHSV(160, 90, 255);
+  }
+}
+
+void DpadLightning() {
+  if (random8() < 15) {
+    fill_solid(leds2, NUM_LEDS2, CRGB::White);
+    fill_solid(leds, LED_COUNT, CRGB::White);
+  } else {
+    fadeToBlackBy(leds2, NUM_LEDS2, 80);
+    fadeToBlackBy(leds, LED_COUNT, 80);
+  }
+}
+
+void DpadSiren() {
+  unsigned long elapsed = millis() - dpadEffectStart;
+  bool redSide = (elapsed / 150) % 2 == 0;
+  for (int i = 0; i < NUM_LEDS2; i++) {
+    bool firstHalf = i < NUM_LEDS2 / 2;
+    leds2[i] = (firstHalf == redSide) ? CRGB::Red : CRGB::Blue;
+  }
+  for (int i = 0; i < LED_COUNT; i++) {
+    bool firstHalf = i < LED_COUNT / 2;
+    leds[i] = (firstHalf == redSide) ? CRGB::Red : CRGB::Blue;
+  }
+}
+
+void DpadPlasma() {
+  unsigned long elapsed = millis() - dpadEffectStart;
+  for (int i = 0; i < NUM_LEDS2; i++) {
+    uint8_t colorIndex = sin8(i * 20 + elapsed / 4) / 2 + sin8(i * 10 - elapsed / 6) / 2;
+    leds2[i] = CHSV(colorIndex, 255, 255);
+  }
+  for (int i = 0; i < LED_COUNT; i++) {
+    uint8_t colorIndex = sin8(i * 60 + elapsed / 4) / 2 + sin8(i * 30 - elapsed / 6) / 2;
+    leds[i] = CHSV(colorIndex, 255, 255);
+  }
+}
+
+void UpdateExternalStrip(bool r2Pressed, bool r1Pressed, bool trianglePressed, bool reversing, bool dpadUp, bool dpadDown, bool dpadLeft, bool dpadRight) {
 
   // R1 or R2 breaks out of the victory show
   if ((r2Pressed || r1Pressed) && victoryActive) {
     victoryActive = false;
+  }
+
+  if ((r2Pressed || r1Pressed) && currentDpadEffect != DPAD_NONE) {
+    currentDpadEffect = DPAD_NONE;
+  }
+
+  if (dpadUp && !lastDpadUp) { currentDpadEffect = DPAD_TWINKLE; dpadEffectStart = millis(); }
+  if (dpadDown && !lastDpadDown) { currentDpadEffect = DPAD_LIGHTNING; dpadEffectStart = millis(); }
+  if (dpadLeft && !lastDpadLeft) { currentDpadEffect = DPAD_SIREN; dpadEffectStart = millis(); }
+  if (dpadRight && !lastDpadRight) { currentDpadEffect = DPAD_PLASMA; dpadEffectStart = millis(); }
+  lastDpadUp = dpadUp;
+  lastDpadDown = dpadDown;
+  lastDpadLeft = dpadLeft;
+  lastDpadRight = dpadRight;
+
+  if (currentDpadEffect != DPAD_NONE) {
+    if (millis() - dpadEffectStart > DPAD_EFFECT_DURATION) {
+      currentDpadEffect = DPAD_NONE;
+    } else {
+      switch (currentDpadEffect) {
+        case DPAD_TWINKLE: DpadTwinkle(); break;
+        case DPAD_LIGHTNING: DpadLightning(); break;
+        case DPAD_SIREN: DpadSiren(); break;
+        case DPAD_PLASMA: DpadPlasma(); break;
+        default: break;
+      }
+      return;
+    }
   }
 
   // Press traingle for victory show, unless already running
@@ -325,10 +437,19 @@ void UpdateExternalStrip(bool r2Pressed, bool r1Pressed, bool trianglePressed) {
   if (victoryActive) {
     // rainbow chase remb to change it later
     fill_rainbow(leds2, NUM_LEDS2, victoryHue, 12);
+    fill_rainbow(leds, LED_COUNT, victoryHue, 40);
     victoryHue += 4;
     if (random8() < 40) {
       leds2[random16(NUM_LEDS2)] += CRGB::White;
+      leds[random16(LED_COUNT)] += CRGB::White;
     }
+    return;
+  }
+
+  if (reversing) {
+    bool on = (millis() / flashInterval) % 2 == 0;
+    fill_solid(leds2, NUM_LEDS2, on ? CRGB::White : CRGB::Black);
+    fill_solid(leds, LED_COUNT, on ? CRGB::White : CRGB::Black);
     return;
   }
 
@@ -338,6 +459,7 @@ void UpdateExternalStrip(bool r2Pressed, bool r1Pressed, bool trianglePressed) {
       bool on = (elapsed / flashInterval) % 2 == 0;
       CRGB color = (currentFlashColor == FLASH_RED) ? CRGB::Red : CRGB::Green;
       fill_solid(leds2, NUM_LEDS2, on ? color : CRGB::Black);
+      fill_solid(leds, LED_COUNT, on ? color : CRGB::Black);
     } else {
       flashing = false;
       currentFlashColor = FLASH_NONE;
@@ -345,10 +467,13 @@ void UpdateExternalStrip(bool r2Pressed, bool r1Pressed, bool trianglePressed) {
   } else {
     if (millis() - lastSnakeMove > snakeSpeed) {
       fill_solid(leds2, NUM_LEDS2, CRGB::Black);
+      fill_solid(leds, LED_COUNT, CRGB::Black);
+      CRGB snakeColor = batteryWarn ? CRGB::Red : CRGB::White;
       for (int i = 0; i < SNAKE_LEN; i++) {
         int idx = snakePos + i;
-        if (idx >= 0 && idx < NUM_LEDS2) leds2[idx] = CRGB::White;
+        if (idx >= 0 && idx < NUM_LEDS2) leds2[idx] = snakeColor;
       }
+      leds[snakePos % LED_COUNT] = snakeColor;
       snakePos += snakeDirection;
       if (snakePos + SNAKE_LEN - 1 >= NUM_LEDS2 - 1 || snakePos <= 0) {
         snakeDirection *= -1;
@@ -389,7 +514,7 @@ void setup() {
   ConfigureMotorOutput(9, MG90_Degree); //front right 
   ConfigureMotorOutput(10, MG90_Degree); //front left
 
-  // SPARE
+  // left over one 
   ConfigureMotorOutput(12, N20Plus);
 
   Serial.println("LoRcore V3 System Ready! ");
@@ -400,6 +525,10 @@ void setup() {
 void loop() {
   esp_task_wdt_reset();
   BP32.update();
+
+  // battery voltage read - visual warning only and i thin it should not touch power/performance
+  battVoltage = (analogRead(VIN_SENSE) * VOLT_SLOPE) + VOLT_OFFSET;
+  batteryWarn = battVoltage < BATT_WARN_V;
 
   if (myController && myController->isConnected()) {
 
@@ -421,34 +550,60 @@ void loop() {
     MotorOutput[9].write(constrain((180 - supportAngle) + TRIM_9, 0, 180));
     MotorOutput[10].write(constrain(supportAngle + TRIM_10, 0, 180));
 
-    // TANK DRIVE (6 MOTORS)
-    int moveValue = -myController->axisRX();
-    int turnValue = myController->axisY();
+  
+int moveValue = myController->axisRX()* 0.6;
+int turnValue = -myController->axisY();
 
-    int left = moveValue + turnValue;
-    int right = moveValue - turnValue;
+int left = moveValue + turnValue;
+int right = moveValue - turnValue;
 
-    if (abs(left) < 50) left = 0;
-    if (abs(right) < 50) right = 0;
+if (abs(left) < 50) left = 0;
+if (abs(right) < 50) right = 0;
 
-    int MappedLeft = constrain(map(left, -512, 512, 0, 180), 0, 180);
-    int MappedRight = constrain(map(right, -512, 512, 0, 180), 0, 180);
+int MappedLeft = constrain(map(left, -512, 512, 0, 180), 0, 180);
+int MappedRight = constrain(map(right, -512, 512, 0, 180), 0, 180);
 
-    MotorOutput[1].write(MappedLeft);
-    MotorOutput[2].write(MappedLeft);
-    MotorOutput[3].write(MappedLeft);
 
-    MotorOutput[4].write(MappedRight);
-    MotorOutput[5].write(MappedRight);
-    MotorOutput[6].write(MappedRight);
+// SLEW RATE SSTUFF (FULL FIX IS HERE)
+bool leftReversing = (currentLeftOut > 90 && MappedLeft < 90) || (currentLeftOut < 90 && MappedLeft > 90);
+bool rightReversing = (currentRightOut > 90 && MappedRight < 90) || (currentRightOut < 90 && MappedRight > 90);
+
+if (leftReversing) {
+  currentLeftOut = 90;
+  leftReverseDwell = millis();
+} else if (millis() - leftReverseDwell > REVERSE_DWELL_MS) {
+  SlewMove(currentLeftOut, MappedLeft);
+}
+
+if (rightReversing) {
+  currentRightOut = 90;
+  rightReverseDwell = millis();
+} else if (millis() - rightReverseDwell > REVERSE_DWELL_MS) {
+  SlewMove(currentRightOut, MappedRight);
+}
+
+
+    MotorOutput[1].write(currentLeftOut);
+    MotorOutput[2].write(currentLeftOut);
+    MotorOutput[3].write(currentLeftOut);
+
+    MotorOutput[4].write(currentRightOut);
+    MotorOutput[5].write(currentRightOut);
+    MotorOutput[6].write(currentRightOut);
 
     GamePad_BatteryMonitor();
 
-    UpdateExternalStrip(myController->r2(), myController->r1(), myController->y());
+    // reversing flag true when the drive stick is pushed back past the deadzone test for now 
+    bool reversing = turnValue < -50;
 
-    fill_rainbow(leds, LED_COUNT, rainbowHue++, 20);
+UpdateExternalStrip(myController->r2(), myController->r1(), myController->y(), reversing,
+                         myController->dpad() & DPAD_UP,
+                         myController->dpad() & DPAD_DOWN,
+                         myController->dpad() & DPAD_LEFT,
+                         myController->dpad() & DPAD_RIGHT);
+
     FastLED.show();
-    delay(50);
+    delay(20);
   } else {
     for (int i = 1; i <= 12; i++) MotorOutput[i].write(90);
     fill_solid(leds, LED_COUNT, CRGB(0, 80, 255));
