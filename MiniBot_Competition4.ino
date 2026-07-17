@@ -8,7 +8,6 @@ int supportAngle = 0;
 const int SUPPORT_ZERO = 0;
 const int SUPPORT_MAX  = 150;
 
-//led setup for now
 #define LED_PIN2 22
 #define NUM_LEDS2 18
 CRGB leds2[NUM_LEDS2];
@@ -22,7 +21,7 @@ const int SNAKE_LEN = 3;
 bool flashing = false;
 unsigned long flashStart = 0;
 const int flashInterval = 50;
-const int flashDurationCycles = 10; // 4 full on/off and it flashes
+const int flashDurationCycles = 10; // 4 full on and off and it flashes
 
 enum FlashColor { FLASH_NONE, FLASH_GREEN, FLASH_RED };
 FlashColor currentFlashColor = FLASH_NONE;
@@ -34,24 +33,26 @@ bool lastTriangleState = false;
 bool victoryActive = false;
 uint8_t victoryHue = 0;
 
-// D-PAD LED EFFECTS
 bool lastDpadUp = false, lastDpadDown = false, lastDpadLeft = false, lastDpadRight = false;
 enum DpadEffect { DPAD_NONE, DPAD_TWINKLE, DPAD_LIGHTNING, DPAD_SIREN, DPAD_PLASMA };
 DpadEffect currentDpadEffect = DPAD_NONE;
 unsigned long dpadEffectStart = 0;
-const unsigned long DPAD_EFFECT_DURATION = 8000; // ms each effect plays before returning to snake
+const unsigned long DPAD_EFFECT_DURATION = 8000; // time for the random buttons
 
-// BATTERY MONITORING (visual warning only - does not affect power/performance)
+// BATTERY MONITORING does not affect power or performance
 float battVoltage = 0;
 bool batteryWarn = false;
-const float BATT_WARN_V = 7.0;      // snake turns red below this
+const float BATT_WARN_V = 7.2; // when it turns red just swap battery
 
-// changing the damn servo angle so they aline 
-const int TRIM_7 = -7;  
+const int TRIM_7 = -7;  // servo angle 
 const int TRIM_8 = 0;
 
 const int TRIM_9 = 0;
 const int TRIM_10 = 0;
+
+int ledBrightnessPercent = 100; 
+bool lastBState = false;
+bool lastAState = false;
 
 const uint8_t AUX_PINS[9] = { 0, 5, 18, 23, 19, 22, 21, 1, 3 };
 const uint8_t IO_PINS[13] = { 0, 32, 25, 26, 27, 14, 12, 13, 15, 2, 4, 22, 21 };
@@ -79,11 +80,11 @@ uint8_t rainbowHue = 0;
 #define WDT_TIMEOUT 3
 Servo MotorOutput[13];
 
-// DRIVE SMOOTHING
+// Drive smooth 
 float currentLeftOut = 90;
 float currentRightOut = 90;
 
-const float SLEW_RATE = 25; // adjust this higher for faster response
+const float SLEW_RATE = 25; 
 
 unsigned long leftReverseDwell = 0;
 unsigned long rightReverseDwell = 0;
@@ -208,42 +209,6 @@ void INIT_BluetoothGamepad_PairMode() {
   } else BP32.setup(&onConnectedController, &onDisconnectedController);
 
   BP32.enableVirtualDevice(false);
-}
-
-float Low_Batt_Scaler = 1.0;
-unsigned long TriggerTime = 0;
-bool Scaler_StepState = 0;
-unsigned long Check_Period_TriggerTime = 0;
-
-float LoRcore_BatteryMonitor(uint8_t cellCount, float perCellLowV = 3.0, bool DEBUG = true) {
-  int vin_raw = analogRead(VIN_SENSE);
-  float vin_voltage = (vin_raw * VOLT_SLOPE) + VOLT_OFFSET;
-  float lowVoltageThreshold = cellCount * perCellLowV;
-
-  if (millis() > Check_Period_TriggerTime && DEBUG) {
-    Check_Period_TriggerTime = millis() + 500;
-    Serial.printf("VIN: %.2f V, Threshold: %.2f V\n", vin_voltage, lowVoltageThreshold);
-  }
-
-  if (vin_voltage < lowVoltageThreshold) {
-    Serial.printf("LOW Battery: %.2f V\n", vin_voltage);
-
-    if (millis() > TriggerTime) {
-      if (Scaler_StepState) {
-        Low_Batt_Scaler = 0;
-      } else {
-        Low_Batt_Scaler = 0.25;
-        fill_solid(leds, LED_COUNT, CRGB(255, 0, 0));
-        FastLED.show();
-        delay(100);
-      }
-      Scaler_StepState = !Scaler_StepState;
-      TriggerTime = millis() + 100;
-    }
-  } else {
-    Low_Batt_Scaler = 1.0;
-  }
-  return vin_voltage;
 }
 
 void Powerup_Diagnostics_LED() {
@@ -381,7 +346,7 @@ void DpadPlasma() {
 
 void UpdateExternalStrip(bool r2Pressed, bool r1Pressed, bool trianglePressed, bool reversing, bool dpadUp, bool dpadDown, bool dpadLeft, bool dpadRight) {
 
-  // R1 or R2 breaks out of the victory show
+
   if ((r2Pressed || r1Pressed) && victoryActive) {
     victoryActive = false;
   }
@@ -414,13 +379,11 @@ void UpdateExternalStrip(bool r2Pressed, bool r1Pressed, bool trianglePressed, b
     }
   }
 
-  // Press traingle for victory show, unless already running
   if (trianglePressed && !lastTriangleState && !victoryActive) {
     victoryActive = true;
   }
   lastTriangleState = trianglePressed;
 
-  //detect R2 -> green flash, R1 -> red flash
   if (r2Pressed && !lastR2State) {
     flashing = true;
     flashStart = millis();
@@ -496,21 +459,21 @@ void setup() {
 
   Serial.println("Motors Startup");
 
-  // LEFT DRIVE
+  // Left Drive
   ConfigureMotorOutput(1, N20Plus); // LF
   ConfigureMotorOutput(2, N20Plus); // LM
   ConfigureMotorOutput(3, N20Plus); // LB
 
-  // RIGHT DRIVE
+  // Right Drive
   ConfigureMotorOutput(4, N20Plus); // RF
   ConfigureMotorOutput(5, N20Plus); // RM
   ConfigureMotorOutput(6, N20Plus); // RB
 
-  // ARM SERVOS
+  // arm
   ConfigureMotorOutput(7, MG90_Degree);// back right
   ConfigureMotorOutput(8, MG90_Degree); //back left
 
-  // SUPPORT SERVOS (move together with arm)
+  //support thing
   ConfigureMotorOutput(9, MG90_Degree); //front right 
   ConfigureMotorOutput(10, MG90_Degree); //front left
 
@@ -526,7 +489,6 @@ void loop() {
   esp_task_wdt_reset();
   BP32.update();
 
-  // battery voltage read - visual warning only and i thin it should not touch power/performance
   battVoltage = (analogRead(VIN_SENSE) * VOLT_SLOPE) + VOLT_OFFSET;
   batteryWarn = battVoltage < BATT_WARN_V;
 
@@ -549,6 +511,21 @@ void loop() {
     }
     MotorOutput[9].write(constrain((180 - supportAngle) + TRIM_9, 0, 180));
     MotorOutput[10].write(constrain(supportAngle + TRIM_10, 0, 180));
+
+
+  bool bPressed = myController->b(); 
+  bool aPressed = myController->a(); 
+
+  if (bPressed && !lastBState) {
+    ledBrightnessPercent = min(100, ledBrightnessPercent + 20);
+  }
+  if (aPressed && !lastAState) {
+    ledBrightnessPercent = max(0, ledBrightnessPercent - 20);
+  }
+  lastBState = bPressed;
+  lastAState = aPressed;
+
+  FastLED.setBrightness(map(ledBrightnessPercent, 0, 100, 0, 255));
 
   
 int moveValue = myController->axisRX()* 0.6;
@@ -593,7 +570,6 @@ if (rightReversing) {
 
     GamePad_BatteryMonitor();
 
-    // reversing flag true when the drive stick is pushed back past the deadzone test for now 
     bool reversing = turnValue < -50;
 
 UpdateExternalStrip(myController->r2(), myController->r1(), myController->y(), reversing,
