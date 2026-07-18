@@ -528,7 +528,7 @@ void loop() {
   FastLED.setBrightness(map(ledBrightnessPercent, 0, 100, 0, 255));
 
   
-int moveValue = myController->axisRX()* 0.6;
+int moveValue = myController->axisRX()* 0.8;
 int turnValue = -myController->axisY();
 
 int left = moveValue + turnValue;
