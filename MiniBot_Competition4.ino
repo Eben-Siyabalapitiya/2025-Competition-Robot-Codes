@@ -459,15 +459,15 @@ void setup() {
 
   Serial.println("Motors Startup");
 
-  // Right Drive
-  ConfigureMotorOutput(1, N20Plus); // RF
-  ConfigureMotorOutput(2, N20Plus); // RM
-  ConfigureMotorOutput(3, N20Plus); // RB
-
   // Left Drive
-  ConfigureMotorOutput(4, N20Plus); // LF
-  ConfigureMotorOutput(5, N20Plus); // LM
-  ConfigureMotorOutput(6, N20Plus); // LB
+  ConfigureMotorOutput(1, N20Plus); // LF
+  ConfigureMotorOutput(2, N20Plus); // LM
+  ConfigureMotorOutput(3, N20Plus); // LB
+
+  // Right Drive
+  ConfigureMotorOutput(4, N20Plus); // RF
+  ConfigureMotorOutput(5, N20Plus); // RM
+  ConfigureMotorOutput(6, N20Plus); // RB
 
   // arm
   ConfigureMotorOutput(7, MG90_Degree);// back right
@@ -537,9 +537,8 @@ int right = moveValue - turnValue;
 if (abs(left) < 50) left = 0;
 if (abs(right) < 50) right = 0;
 
-// negated both sides, motors run backwards after the side swap
-int MappedLeft = constrain(map(-left, -512, 512, 0, 180), 0, 180);
-int MappedRight = constrain(map(-right, -512, 512, 0, 180), 0, 180);
+int MappedLeft = constrain(map(left, -512, 512, 0, 180), 0, 180);
+int MappedRight = constrain(map(right, -512, 512, 0, 180), 0, 180);
 
 
 // SLEW RATE SSTUFF (FULL FIX IS HERE)
@@ -561,13 +560,13 @@ if (rightReversing) {
 }
 
 
-    MotorOutput[1].write(currentRightOut);
-    MotorOutput[2].write(currentRightOut);
-    MotorOutput[3].write(currentRightOut);
+    MotorOutput[1].write(currentLeftOut);
+    MotorOutput[2].write(currentLeftOut);
+    MotorOutput[3].write(currentLeftOut);
 
-    MotorOutput[4].write(currentLeftOut);
-    MotorOutput[5].write(currentLeftOut);
-    MotorOutput[6].write(currentLeftOut);
+    MotorOutput[4].write(currentRightOut);
+    MotorOutput[5].write(currentRightOut);
+    MotorOutput[6].write(currentRightOut);
 
     GamePad_BatteryMonitor();
 
