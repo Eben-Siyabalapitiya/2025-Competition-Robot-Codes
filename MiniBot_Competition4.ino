@@ -537,8 +537,9 @@ int right = moveValue - turnValue;
 if (abs(left) < 50) left = 0;
 if (abs(right) < 50) right = 0;
 
-int MappedLeft = constrain(map(left, -512, 512, 0, 180), 0, 180);
-int MappedRight = constrain(map(right, -512, 512, 0, 180), 0, 180);
+// negated both sides, motors run backwards after the side swap
+int MappedLeft = constrain(map(-left, -512, 512, 0, 180), 0, 180);
+int MappedRight = constrain(map(-right, -512, 512, 0, 180), 0, 180);
 
 
 // SLEW RATE SSTUFF (FULL FIX IS HERE)
