@@ -459,15 +459,15 @@ void setup() {
 
   Serial.println("Motors Startup");
 
-  // Left Drive
-  ConfigureMotorOutput(1, N20Plus); // LF
-  ConfigureMotorOutput(2, N20Plus); // LM
-  ConfigureMotorOutput(3, N20Plus); // LB
-
   // Right Drive
-  ConfigureMotorOutput(4, N20Plus); // RF
-  ConfigureMotorOutput(5, N20Plus); // RM
-  ConfigureMotorOutput(6, N20Plus); // RB
+  ConfigureMotorOutput(1, N20Plus); // RF
+  ConfigureMotorOutput(2, N20Plus); // RM
+  ConfigureMotorOutput(3, N20Plus); // RB
+
+  // Left Drive
+  ConfigureMotorOutput(4, N20Plus); // LF
+  ConfigureMotorOutput(5, N20Plus); // LM
+  ConfigureMotorOutput(6, N20Plus); // LB
 
   // arm
   ConfigureMotorOutput(7, MG90_Degree);// back right
@@ -560,13 +560,13 @@ if (rightReversing) {
 }
 
 
-    MotorOutput[1].write(currentLeftOut);
-    MotorOutput[2].write(currentLeftOut);
-    MotorOutput[3].write(currentLeftOut);
+    MotorOutput[1].write(currentRightOut);
+    MotorOutput[2].write(currentRightOut);
+    MotorOutput[3].write(currentRightOut);
 
-    MotorOutput[4].write(currentRightOut);
-    MotorOutput[5].write(currentRightOut);
-    MotorOutput[6].write(currentRightOut);
+    MotorOutput[4].write(currentLeftOut);
+    MotorOutput[5].write(currentLeftOut);
+    MotorOutput[6].write(currentLeftOut);
 
     GamePad_BatteryMonitor();
 
